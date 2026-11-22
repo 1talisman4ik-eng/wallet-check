@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solana Wallet Check — пустые токен-аккаунты и возврат SOL</title>
+<style>
+  :root { --bg:#0e1116; --card:#171b22; --line:#262c36; --txt:#e8ecf2; --mut:#8b95a5; --acc:#7c5cff; --ok:#2ecc8f; --warn:#f0b429; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:22px; margin:0; }
+  .lang button { background:none; border:1px solid var(--line); color:var(--mut); padding:4px 10px; border-radius:6px; cursor:pointer; }
+  .lang button.on { color:var(--txt); border-color:var(--acc); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:16px; }
+  .safe { border-color:#27553f; background:#12211b; color:#bfe9d3; font-size:14px; }
+  input[type=text] { width:100%; padding:12px; border-radius:8px; border:1px solid var(--line); background:#0b0e13; color:var(--txt); font-size:15px; }
+  details summary { cursor:pointer; color:var(--mut); font-size:14px; margin-top:10px; }
+  button.go { margin-top:12px; width:100%; padding:12px; border:0; border-radius:8px; background:var(--acc); color:#fff; font-size:16px; cursor:pointer; }
+  button.go:disabled { opacity:.5; cursor:default; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:4px; }
+  .stat { background:#0b0e13; border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { color:var(--mut); font-size:13px; }
+  .big b { color:var(--ok); }
+  .err { color:#ff8a8a; }
+  .note { color:var(--mut); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); word-break:break-all; }
+  .copy { margin-top:10px; background:none; border:1px solid var(--line); color:var(--txt); padding:8px 12px; border-radius:8px; cursor:pointer; }
+  footer { margin-top:24px; color:var(--mut); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="t-title"></h1>
+    <div class="lang">
+      <button data-l="ru">RU</button><button data-l="uz">UZ</button><button data-l="en">EN</button>
+    </div>
+  </header>
+
+  <div class="card safe" id="t-safe"></div>
+
+  <div class="card">
+    <label for="addr" id="t-label"></label>
+    <input id="addr" type="text" autocomplete="off" spellcheck="false" placeholder="So11…">
+    <details>
+      <summary id="t-adv"></summary>
+      <input id="rpc" type="text" value="https://api.mainnet-beta.solana.com" spellcheck="false" style="margin-top:8px">
+      <div class="note" id="t-rpcnote" style="margin-top:6px"></div>
+    </details>
+    <button class="go" id="go"></button>
+    <div id="msg" class="note" style="margin-top:10px"></div>
+  </div>
+
+  <div id="result"></div>
+
+  <footer id="t-foot"></footer>
+</div>
+
+<script src="wallet-core.js"></script>
+<script>
+const I18N = {
+  ru: {
+    title: 'Solana Wallet Check',
+    safe: 'Только чтение. Страница не просит ключи и seed-фразу и ничего не подписывает. Нужен только публичный адрес. Никогда не вводите seed-фразу на сайтах.',
+    label: 'Публичный адрес кошелька Solana',
+    adv: 'Дополнительно: RPC-узел',
+    rpcnote: 'Если публичный узел отвечает ошибкой или лимитом запросов, вставьте адрес вашего RPC (например, бесплатный ключ у провайдера).',
+    go: 'Проверить', loading: 'Запрашиваю данные…',
+    bad: 'Это не похоже на адрес Solana (32–44 символа base58).',
+    fail: 'Не удалось получить данные: ',
+    sol: 'Баланс SOL', accs: 'Токен-аккаунтов', empty: 'Пустых аккаунтов', back: 'Можно вернуть (SOL)',
+    none: 'Пустых токен-аккаунтов нет, возвращать нечего.',
+    explain: 'Каждый токен-аккаунт хранит залог (ренту) в SOL. Если токенов на нём 0, аккаунт можно закрыть в кошельке и залог вернётся. Эта страница только считает сумму, сама ничего не закрывает.',
+    mint: 'Токен (mint)', acct: 'Аккаунт', rent: 'Рента, SOL', copy: 'Скопировать список', copied: 'Скопировано',
+    foot: 'Данные берутся напрямую из блокчейна через RPC. Расчёт — по реальному залогу каждого аккаунта. Замороженные аккаунты не учитываются. Не финансовая рекомендация.'
+  },
+  uz: {
+    title: 'Solana Wallet Check',
+    safe: 'Faqat o‘qish. Sahifa kalit yoki seed-ibora so‘ramaydi va hech narsani imzolamaydi. Faqat ochiq manzil kerak. Seed-iborani hech qachon saytlarga kiritmang.',
+    label: 'Solana hamyonining ochiq manzili',
+    adv: 'Qo‘shimcha: RPC tuguni',
+    rpcnote: 'Ochiq tugun xato yoki limit bersa, o‘zingizning RPC manzilingizni kiriting.',
+    go: 'Tekshirish', loading: 'Ma’lumot so‘ralmoqda…',
+    bad: 'Bu Solana manziliga o‘xshamaydi (32–44 ta base58 belgi).',
+    fail: 'Ma’lumot olinmadi: ',
+    sol: 'SOL balansi', accs: 'Token-akkauntlar', empty: 'Bo‘sh akkauntlar', back: 'Qaytarish mumkin (SOL)',
+    none: 'Bo‘sh token-akkauntlar yo‘q, qaytariladigan narsa yo‘q.',
+    explain: 'Har bir token-akkaunt SOL’da garov (renta) saqlaydi. Akkauntda token 0 bo‘lsa, uni hamyonda yopib, garovni qaytarib olish mumkin. Bu sahifa faqat summani hisoblaydi, o‘zi hech narsani yopmaydi.',
+    mint: 'Token (mint)', acct: 'Akkaunt', rent: 'Renta, SOL', copy: 'Ro‘yxatni nusxalash', copied: 'Nusxalandi',
+    foot: 'Ma’lumot blokcheyndan RPC orqali to‘g‘ridan-to‘g‘ri olinadi. Muzlatilgan akkauntlar hisobga olinmaydi. Moliyaviy maslahat emas.'
+  },
+  en: {
+    title: 'Solana Wallet Check',
+    safe: 'Read-only. This page never asks for keys or a seed phrase and signs nothing. It only needs a public address. Never enter a seed phrase on any website.',
+    label: 'Public Solana wallet address',
+    adv: 'Advanced: RPC endpoint',
+    rpcnote: 'If the public endpoint errors or rate-limits, paste your own RPC URL.',
+    go: 'Check', loading: 'Fetching data…',
+    bad: 'That does not look like a Solana address (32–44 base58 characters).',
+    fail: 'Could not fetch data: ',
+    sol: 'SOL balance', accs: 'Token accounts', empty: 'Empty accounts', back: 'Reclaimable (SOL)',
+    none: 'No empty token accounts, nothing to reclaim.',
+    explain: 'Each token account holds a SOL rent deposit. If its token balance is 0, you can close it in your wallet and get the deposit back. This page only calculates the amount and closes nothing.',
+    mint: 'Token (mint)', acct: 'Account', rent: 'Rent, SOL', copy: 'Copy list', copied: 'Copied',
+    foot: 'Data comes straight from the blockchain via RPC. Amounts use each account’s real deposit. Frozen accounts are excluded. Not financial advice.'
+  }
+};
+
+let lang = 'ru';
+try { lang = localStorage.getItem('lang') || (navigator.language || 'ru').slice(0,2); } catch (e) {}
+if (!I18N[lang]) lang = 'ru';
+
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 6 });
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function short(s) { return s.length > 12 ? s.slice(0,5) + '…' + s.slice(-5) : s; }
+
+function applyLang() {
+  const t = I18N[lang];
+  document.documentElement.lang = lang;
+  $('t-title').textContent = t.title;
+  $('t-safe').textContent = t.safe;
+  $('t-label').textContent = t.label;
+  $('t-adv').textContent = t.adv;
+  $('t-rpcnote').textContent = t.rpcnote;
+  $('go').textContent = t.go;
+  $('t-foot').textContent = t.foot;
+  document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.l === lang));
+  if (window.__last) render(window.__last);
+}
+
+document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => {
+  lang = b.dataset.l;
+  try { localStorage.setItem('lang', lang); } catch (e) {}
+  applyLang();
+}));
+
+function render(d) {
+  const t = I18N[lang];
+  let h = '<div class="card"><div class="grid">' +
+    '<div class="stat"><b>' + fmt(d.solBalance) + '</b><span>' + t.sol + '</span></div>' +
+    '<div class="stat"><b>' + d.totalTokenAccounts + '</b><span>' + t.accs + '</span></div>' +
+    '<div class="stat"><b>' + d.emptyCount + '</b><span>' + t.empty + '</span></div>' +
+    '<div class="stat big"><b>' + fmt(d.reclaimableSol) + '</b><span>' + t.back + '</span></div></div>';
+  if (d.emptyCount === 0) {
+    h += '<p class="note">' + t.none + '</p>';
+  } else {
+    h += '<p class="note">' + t.explain + '</p>';
+    h += '<table><tr><th>' + t.mint + '</th><th>' + t.acct + '</th><th>' + t.rent + '</th></tr>';
+    d.empty.slice(0, 200).forEach(e => {
+      h += '<tr><td>' + esc(short(e.mint)) + '</td><td>' + esc(short(e.pubkey)) + '</td><td>' + fmt(WalletCore.lamportsToSol(e.lamports)) + '</td></tr>';
+    });
+    h += '</table><button class="copy" id="copy">' + t.copy + '</button>';
+  }
+  h += '</div>';
+  $('result').innerHTML = h;
+  const c = $('copy');
+  if (c) c.addEventListener('click', async () => {
+    const text = d.empty.map(e => e.pubkey).join('\n');
+    try { await navigator.clipboard.writeText(text); c.textContent = t.copied; } catch (e) {}
+  });
+}
+
+$('go').addEventListener('click', async () => {
+  const t = I18N[lang];
+  const addr = $('addr').value.trim();
+  $('result').innerHTML = '';
+  window.__last = null;
+  if (!WalletCore.isValidAddress(addr)) { $('msg').innerHTML = '<span class="err">' + t.bad + '</span>'; return; }
+  $('msg').textContent = t.loading;
+  $('go').disabled = true;
+  try {
+    const d = await WalletCore.checkWallet(fetch.bind(window), $('rpc').value.trim(), addr);
+    window.__last = d;
+    $('msg').textContent = '';
+    render(d);
+  } catch (e) {
+    $('msg').innerHTML = '<span class="err">' + esc(t.fail + e.message) + '</span>';
+  } finally {
+    $('go').disabled = false;
+  }
+});
+$('addr').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
+
+applyLang();
+</script>
+</body>
+</html>
