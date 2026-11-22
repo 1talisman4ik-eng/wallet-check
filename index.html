@@ -48,7 +48,7 @@
     <input id="addr" type="text" autocomplete="off" spellcheck="false" placeholder="So11…">
     <details>
       <summary id="t-adv"></summary>
-      <input id="rpc" type="text" value="https://api.mainnet-beta.solana.com" spellcheck="false" style="margin-top:8px">
+      <input id="rpc" type="text" value="https://solana-rpc.publicnode.com" spellcheck="false" style="margin-top:8px">
       <div class="note" id="t-rpcnote" style="margin-top:6px"></div>
     </details>
     <button class="go" id="go"></button>
@@ -72,6 +72,7 @@ const I18N = {
     go: 'Проверить', loading: 'Запрашиваю данные…',
     bad: 'Это не похоже на адрес Solana (32–44 символа base58).',
     fail: 'Не удалось получить данные: ',
+    hint: ' Бесплатные публичные узлы блокируют запрос токен-аккаунтов. Вставьте адрес своего RPC с бесплатным ключом (Helius, Alchemy, QuickNode) в поле «Дополнительно».',
     sol: 'Баланс SOL', accs: 'Токен-аккаунтов', empty: 'Пустых аккаунтов', back: 'Можно вернуть (SOL)',
     none: 'Пустых токен-аккаунтов нет, возвращать нечего.',
     explain: 'Каждый токен-аккаунт хранит залог (ренту) в SOL. Если токенов на нём 0, аккаунт можно закрыть в кошельке и залог вернётся. Эта страница только считает сумму, сама ничего не закрывает.',
@@ -87,6 +88,7 @@ const I18N = {
     go: 'Tekshirish', loading: 'Ma’lumot so‘ralmoqda…',
     bad: 'Bu Solana manziliga o‘xshamaydi (32–44 ta base58 belgi).',
     fail: 'Ma’lumot olinmadi: ',
+    hint: ' Bepul ochiq tugunlar token-akkauntlar so‘rovini bloklaydi. «Qo‘shimcha» maydoniga o‘zingizning RPC manzilingizni (Helius, Alchemy, QuickNode) kiriting.',
     sol: 'SOL balansi', accs: 'Token-akkauntlar', empty: 'Bo‘sh akkauntlar', back: 'Qaytarish mumkin (SOL)',
     none: 'Bo‘sh token-akkauntlar yo‘q, qaytariladigan narsa yo‘q.',
     explain: 'Har bir token-akkaunt SOL’da garov (renta) saqlaydi. Akkauntda token 0 bo‘lsa, uni hamyonda yopib, garovni qaytarib olish mumkin. Bu sahifa faqat summani hisoblaydi, o‘zi hech narsani yopmaydi.',
@@ -102,6 +104,7 @@ const I18N = {
     go: 'Check', loading: 'Fetching data…',
     bad: 'That does not look like a Solana address (32–44 base58 characters).',
     fail: 'Could not fetch data: ',
+    hint: ' Free public nodes block the token-accounts request. Paste your own RPC URL with a free key (Helius, Alchemy, QuickNode) under Advanced.',
     sol: 'SOL balance', accs: 'Token accounts', empty: 'Empty accounts', back: 'Reclaimable (SOL)',
     none: 'No empty token accounts, nothing to reclaim.',
     explain: 'Each token account holds a SOL rent deposit. If its token balance is 0, you can close it in your wallet and get the deposit back. This page only calculates the amount and closes nothing.',
@@ -180,7 +183,7 @@ $('go').addEventListener('click', async () => {
     $('msg').textContent = '';
     render(d);
   } catch (e) {
-    $('msg').innerHTML = '<span class="err">' + esc(t.fail + e.message) + '</span>';
+    $('msg').innerHTML = '<span class="err">' + esc(t.fail + e.message + (/403|429|blocked|Failed to fetch/i.test(e.message) ? t.hint : '')) + '</span>';
   } finally {
     $('go').disabled = false;
   }
